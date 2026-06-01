@@ -869,5 +869,83 @@ with aba_eda:
 
 
 with aba_etica:
-    st.header("Ética e Limitações")
-    st.info("A reflexão ética será adicionada nos próximos commits.")
+    st.header("Ética, riscos e limitações")
+
+    st.markdown(
+        """
+        Este protótipo deve ser usado apenas como **apoio educacional e acadêmico**.
+
+        A proposta do sistema é auxiliar na **triagem preventiva** e na conscientização
+        sobre possíveis fatores associados ao risco de diabetes. Ele não realiza diagnóstico
+        médico, não substitui consulta profissional e não deve ser usado como única fonte
+        para tomada de decisão clínica.
+
+        ### Limitações do dataset
+
+        - O dataset possui quantidade limitada de registros.
+        - A base pode não representar a população brasileira.
+        - Algumas variáveis possuem muitos valores ausentes ou valores 0 usados como ausência de informação.
+        - O modelo aprende padrões do dataset utilizado e pode reproduzir vieses presentes nos dados.
+        - O desempenho obtido neste projeto não garante o mesmo resultado em populações diferentes.
+        - O dataset não contém todos os fatores clínicos, sociais e comportamentais relevantes para avaliação de diabetes.
+
+        ### Riscos do modelo
+
+        - **Falsos negativos:** podem atrasar a busca por orientação profissional.
+        - **Falsos positivos:** podem gerar preocupação desnecessária.
+        - O modelo pode apresentar desempenho diferente entre grupos populacionais.
+        - A predição pode ser interpretada incorretamente por usuários sem orientação.
+        - O sistema não deve ser usado para diagnóstico, prescrição, exclusão de atendimento,
+          definição de plano de saúde ou decisões administrativas sobre pessoas.
+
+        ### Uso responsável
+
+        - A IA deve apoiar a triagem e a conscientização, nunca substituir profissionais de saúde.
+        - A decisão final deve ser feita por médicos ou profissionais qualificados.
+        - O usuário deve ser informado sobre as limitações do modelo.
+        - Dados clínicos exigem cuidado com privacidade, armazenamento, consentimento e segurança.
+        - O resultado deve ser apresentado como probabilidade estimada, não como certeza clínica.
+
+        ### Transparência
+
+        Sempre que possível, o sistema deve explicar quais variáveis influenciaram o risco,
+        apresentar métricas de erro e deixar claro que a predição é probabilística.
+
+        A interface apresenta:
+        
+        - probabilidade estimada;
+        - matriz de confusão;
+        - falsos positivos e falsos negativos;
+        - importância das variáveis em modelos interpretáveis;
+        - recomendações preventivas baseadas em regras simples;
+        - aviso explícito de que o sistema não substitui avaliação médica.
+        """
+    )
+
+    st.subheader("Recomendações concretas de mitigação")
+
+    st.markdown(
+        """
+        Para reduzir riscos e aumentar a confiabilidade do sistema, recomenda-se:
+
+        - Usar bases de dados maiores, mais diversas e mais próximas da população-alvo.
+        - Validar o modelo com dados locais antes de qualquer uso real.
+        - Monitorar falsos negativos e falsos positivos continuamente.
+        - Priorizar recall/sensibilidade em cenários de triagem preventiva.
+        - Avaliar desempenho por subgrupos, como faixa etária, sexo, etnia e contexto social, quando os dados estiverem disponíveis.
+        - Manter mensagens claras de que o sistema não substitui avaliação médica.
+        - Implementar política de privacidade se dados reais forem armazenados.
+        - Registrar versões do modelo, métricas e dataset utilizados.
+        - Revisar periodicamente o modelo com acompanhamento de profissionais de saúde.
+        """
+    )
+
+    st.subheader("Conclusão ética")
+
+    st.success(
+        """
+        A IA pode apoiar ações preventivas em saúde, mas deve ser usada com responsabilidade,
+        transparência e supervisão humana. Neste projeto, o modelo é tratado como ferramenta
+        educacional de apoio à triagem, não como diagnóstico definitivo.
+        """
+    )
