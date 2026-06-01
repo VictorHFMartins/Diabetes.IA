@@ -966,3 +966,40 @@ for recomendacao in interpretacao["Recomendações"]:
     print(f"- {recomendacao}")
 
 # %%
+
+
+#%%
+# 18. REFLEXÃO ÉTICA E LIMITAÇÕES
+
+texto_etica = """
+REFLEXÃO ÉTICA E LIMITAÇÕES
+
+Este sistema é um protótipo acadêmico de apoio à triagem e prevenção.
+Ele não realiza diagnóstico médico e não deve ser usado para tomada de decisão clínica definitiva.
+
+Principais limitações:
+1. O dataset pode não representar a população brasileira.
+2. A base possui registros limitados e variáveis com valores ausentes.
+3. Alguns valores 0 foram tratados como ausentes por serem clinicamente improváveis.
+4. O modelo pode apresentar vieses de acordo com a população representada no dataset.
+5. Falsos negativos podem atrasar a busca por atendimento profissional.
+6. Falsos positivos podem gerar preocupação desnecessária.
+7. Dados de saúde exigem privacidade, consentimento e proteção adequada.
+
+Uso responsável:
+- O sistema deve apoiar a triagem, não substituir médicos ou profissionais de saúde.
+- A predição deve ser explicada de forma transparente ao usuário.
+- Recomenda-se validar o modelo com dados locais antes de qualquer uso real.
+- O modelo não deve ser usado para negar atendimento, plano de saúde, benefícios ou oportunidades.
+"""
+
+print("\n" + "=" * 80)
+print(texto_etica)
+print("=" * 80)
+
+with open(PASTA_REPORTS / "reflexao_etica_limitacoes.txt", "w", encoding="utf-8") as arquivo:
+    arquivo.write(texto_etica)
+
+print(f"\nRelatório ético salvo em: {PASTA_REPORTS / 'reflexao_etica_limitacoes.txt'}")
+
+# %%
