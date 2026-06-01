@@ -1,0 +1,5 @@
+,0
+melhor_modelo_criterio_equilibrio,Árvore de Decisão
+modelo_salvo,Árvore de Decisão
+criterio,F1-score > Recall/Sensibilidade > Acurácia
+observacao,"Em saúde, recall e falsos negativos também devem ser analisados antes da escolha final."

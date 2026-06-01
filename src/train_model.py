@@ -896,3 +896,28 @@ for nome in ["Árvore de Decisão", "Árvore de Decisão Otimizada", "Random For
             salvar_figura(f"importancia_variaveis_{nome.lower().replace(' ', '_')}.png")
             plt.show()
 # %%
+# 16. SALVAR MELHOR MODELO E ARTEFATOS
+
+if melhor_modelo_nome in modelos:
+    modelo_para_salvar = modelos[melhor_modelo_nome]
+else:
+    modelo_para_salvar = modelos[modelo_para_cv_nome]
+
+caminho_modelo = PASTA_MODELS / "melhor_modelo_diabetes.joblib"
+joblib.dump(modelo_para_salvar, caminho_modelo)
+
+print("\n" + "=" * 80)
+print("MODELO SALVO")
+print("=" * 80)
+print(f"Modelo salvo em: {caminho_modelo}")
+
+metadata = {
+    "melhor_modelo_criterio_equilibrio": melhor_modelo_nome,
+    "modelo_salvo": modelo_para_cv_nome if melhor_modelo_nome not in modelos else melhor_modelo_nome,
+    "criterio": "F1-score > Recall/Sensibilidade > Acurácia",
+    "observacao": "Em saúde, recall e falsos negativos também devem ser analisados antes da escolha final."
+}
+
+pd.Series(metadata).to_csv(PASTA_REPORTS / "metadata_modelo.csv")
+
+# %%
