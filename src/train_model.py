@@ -407,3 +407,31 @@ print("\nQuantidade de valores ausentes depois da troca de 0 por NaN:")
 print(X.isna().sum())
 
 # %%
+# 7. SEPARAR TREINO E TESTE
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+print("\nTamanho do treino:", X_train.shape)
+print("Tamanho do teste:", X_test.shape)
+
+print("\nDistribuição das classes no treino:")
+print(y_train.value_counts())
+
+print("\nDistribuição das classes no teste:")
+print(y_test.value_counts())
+
+# Salvar divisões de treino e teste para reprodutibilidade acadêmica.
+# Esses arquivos ajudam a demonstrar exatamente quais dados foram usados
+# no treinamento e na avaliação.
+X_train.to_csv(PASTA_TREINO / "X_train.csv", index=False)
+X_test.to_csv(PASTA_TREINO / "X_test.csv", index=False)
+y_train.to_csv(PASTA_TREINO / "y_train.csv", index=False)
+y_test.to_csv(PASTA_TREINO / "y_test.csv", index=False)
+print(f"\nArquivos de treino/teste salvos em: {PASTA_TREINO}")
+
