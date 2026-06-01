@@ -101,7 +101,6 @@ st.markdown(
 )
 
 st.sidebar.header("Configurações")
-st.sidebar.info("As funcionalidades serão adicionadas nos próximos commits.")
 
 aba_predicao, aba_modelos, aba_dataset, aba_eda, aba_etica = st.tabs(
     ["Predição", "Modelos e Métricas", "Dataset", "EDA", "Ética e Limitações"]
@@ -150,3 +149,100 @@ with aba_eda:
 with aba_etica:
     st.header("Ética e Limitações")
     st.info("A reflexão ética será adicionada nos próximos commits.")
+
+@st.cache_resource
+def treinar_modelos():
+    df = carregar_dados()
+    X, y, X_train, X_test, y_train, y_test = preparar_dados(df)
+
+    modelos = {}
+
+    modelos["Regressão Logística"] = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler()),
+        ("model", LogisticRegression(max_iter=1000, random_state=42))
+    ])
+
+    modelos["Árvore de Decisão"] = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("model", DecisionTreeClassifier(max_depth=4, random_state=42))
+    ])
+
+    pipeline_arvore_grid = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("model", DecisionTreeClassifier(random_state=42))
+    ])
+
+    parametros_arvore = {
+        "model__max_depth": [3, 4, 5, 6, 7, 8, None],
+        "model__min_samples_split": [2, 5, 10, 20],
+        "model__min_samples_leaf": [1, 2, 5, 10],
+        "model__criterion": ["gini", "entropy"],
+        "model__class_weight": [None, "balanced"]
+    }
+
+    grid_arvore = GridSearchCV(
+        estimator=pipeline_arvore_grid,
+        param_grid=parametros_arvore,
+        cv=5,
+        scoring="recall",
+        n_jobs=-1
+    )
+
+    modelos["Random Forest Otimizado"] = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("model", RandomForestClassifier(
+            n_estimators=300,
+            max_depth=5,
+            min_samples_split=10,
+            min_samples_leaf=1,
+            class_weight="balanced",
+            random_state=42
+        ))
+    ])
+
+    modelos["KNN"] = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler()),
+        ("model", KNeighborsClassifier(n_neighbors=5))
+    ])
+
+    modelos["SVC"] = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler()),
+        ("model", SVC(kernel="rbf", probability=True, random_state=42))
+    ])
+
+    modelos["Gradient Boosting Otimizado"] = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("model", GradientBoostingClassifier(
+            learning_rate=0.1,
+            max_depth=3,
+            min_samples_leaf=2,
+            min_samples_split=10,
+            n_estimators=200,
+            random_state=42
+        ))
+    ])
+
+    for modelo in modelos.values():
+        modelo.fit(X_train, y_train)
+
+    grid_arvore.fit(X_train, y_train)
+    modelos["Árvore de Decisão Otimizada"] = grid_arvore.best_estimator_
+
+    return modelos, X, y, X_train, X_test, y_train, y_test
+
+
+modelos, X, y, X_train, X_test, y_train, y_test = treinar_modelos()
+
+modelo_escolhido_nome = st.sidebar.selectbox(
+    "Escolha o modelo de IA:",
+    list(modelos.keys()),
+    index=list(modelos.keys()).index("Árvore de Decisão")
+)
+
+modelo_escolhido = modelos[modelo_escolhido_nome]
+
+st.sidebar.write("Modelo selecionado:")
+st.sidebar.success(modelo_escolhido_nome)
