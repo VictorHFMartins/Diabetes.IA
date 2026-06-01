@@ -1,4 +1,12 @@
 #%%
+# ==========================================================
+# AGENTE DE IA PARA PREDIÇÃO DE RISCO DE DIABETES
+# ==========================================================
+#
+# Observação:
+# Este sistema é acadêmico e não substitui diagnóstico médico.
+
+#%%
 ## 1. IMPORTAÇÃO DAS BIBLIOTECAS
 
 from pathlib import Path
