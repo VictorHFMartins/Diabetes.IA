@@ -316,3 +316,82 @@ print(df["Outcome"].value_counts())
 
 print("\nPercentual por classe:")
 print(df["Outcome"].value_counts(normalize=True) * 100)
+
+#%%
+# 5. EDA - ANÁLISE EXPLORATÓRIA VISUAL
+
+print("\n" + "=" * 80)
+print("EDA - ANÁLISE EXPLORATÓRIA DE DADOS")
+print("=" * 80)
+
+# Distribuição da variável alvo
+contagem_classes = df["Outcome"].value_counts().sort_index()
+
+plt.figure(figsize=(7, 5))
+plt.bar(["Sem Diabetes", "Com Diabetes"], contagem_classes.values)
+plt.title("Distribuição das Classes")
+plt.ylabel("Quantidade de registros")
+salvar_figura("eda_distribuicao_classes.png")
+plt.show()
+
+# Zeros inválidos antes do tratamento
+zeros_invalidos = pd.DataFrame({
+    "Coluna": COLUNAS_COM_ZERO_INVALIDO,
+    "Quantidade de zeros": [(df[col] == 0).sum() for col in COLUNAS_COM_ZERO_INVALIDO],
+    "Percentual (%)": [(df[col] == 0).mean() * 100 for col in COLUNAS_COM_ZERO_INVALIDO]
+})
+
+print("\nZeros inválidos antes do tratamento:")
+print(zeros_invalidos)
+zeros_invalidos.to_csv(PASTA_REPORTS / "zeros_invalidos.csv", index=False)
+
+# Histogramas principais
+for coluna in ["Glucose", "BMI", "Age", "Insulin", "BloodPressure", "DiabetesPedigreeFunction"]:
+    plt.figure(figsize=(8, 5))
+    plt.hist(df[coluna].dropna(), bins=25)
+    plt.title(f"Distribuição de {NOMES_VARIAVEIS.get(coluna, coluna)}")
+    plt.xlabel(NOMES_VARIAVEIS.get(coluna, coluna))
+    plt.ylabel("Frequência")
+    plt.grid(True, alpha=0.3)
+    salvar_figura(f"eda_histograma_{coluna}.png")
+    plt.show()
+
+# Boxplots por classe
+for coluna in ["Glucose", "BMI", "Age", "Insulin", "BloodPressure", "DiabetesPedigreeFunction"]:
+    sem_diabetes = df[df["Outcome"] == 0][coluna].dropna()
+    com_diabetes = df[df["Outcome"] == 1][coluna].dropna()
+
+    plt.figure(figsize=(8, 5))
+    plt.boxplot([sem_diabetes, com_diabetes], labels=["Sem Diabetes", "Com Diabetes"])
+    plt.title(f"{NOMES_VARIAVEIS.get(coluna, coluna)} por classe")
+    plt.ylabel(NOMES_VARIAVEIS.get(coluna, coluna))
+    plt.grid(True, alpha=0.3)
+    salvar_figura(f"eda_boxplot_{coluna}.png")
+    plt.show()
+
+# Matriz de correlação
+corr = df.corr(numeric_only=True)
+
+plt.figure(figsize=(10, 8))
+plt.imshow(corr, aspect="auto")
+plt.xticks(range(len(corr.columns)), corr.columns, rotation=45, ha="right")
+plt.yticks(range(len(corr.columns)), corr.columns)
+
+for i in range(len(corr.columns)):
+    for j in range(len(corr.columns)):
+        plt.text(j, i, f"{corr.iloc[i, j]:.2f}", ha="center", va="center", fontsize=8)
+
+plt.title("Matriz de Correlação")
+plt.colorbar()
+salvar_figura("eda_matriz_correlacao.png")
+plt.show()
+
+# Comparação de médias por classe
+medias_por_classe = df.groupby("Outcome").mean(numeric_only=True)
+medias_por_classe.index = ["Sem Diabetes", "Com Diabetes"]
+
+print("\nComparação de médias por classe:")
+print(medias_por_classe)
+
+medias_por_classe.to_csv(PASTA_REPORTS / "medias_por_classe.csv")
+
