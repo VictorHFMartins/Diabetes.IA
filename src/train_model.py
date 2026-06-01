@@ -42,9 +42,15 @@ try:
     import tensorflow as tf
     from tensorflow import keras
     from tensorflow.keras import layers
+
     HAS_TENSORFLOW = True
-except Exception:
+    print(f"TensorFlow carregado com sucesso. Versão: {tf.__version__}")
+
+except Exception as erro:
     HAS_TENSORFLOW = False
+    print("\nTensorFlow não pôde ser carregado nesta execução.")
+    print("Erro encontrado:")
+    print(erro)
 # %%
 ##2. CONFIGURAÇÕES GERAIS E DIRETÓRIOS DO PROJETO
 
@@ -318,7 +324,7 @@ print("\nPercentual por classe:")
 print(df["Outcome"].value_counts(normalize=True) * 100)
 
 #%%
-# 5. EDA - ANÁLISE EXPLORATÓRIA VISUAL
+## 5. EDA - ANÁLISE EXPLORATÓRIA VISUAL
 
 print("\n" + "=" * 80)
 print("EDA - ANÁLISE EXPLORATÓRIA DE DADOS")
@@ -396,7 +402,7 @@ print(medias_por_classe)
 medias_por_classe.to_csv(PASTA_REPORTS / "medias_por_classe.csv")
 
 #%%
-# 6. SEPARAR ENTRADAS E SAÍDA + TRATAR ZEROS INVÁLIDOS
+## 6. SEPARAR ENTRADAS E SAÍDA + TRATAR ZEROS INVÁLIDOS
 
 X = df.drop("Outcome", axis=1).copy()
 y = df["Outcome"].copy()
@@ -407,7 +413,7 @@ print("\nQuantidade de valores ausentes depois da troca de 0 por NaN:")
 print(X.isna().sum())
 
 # %%
-# 7. SEPARAR TREINO E TESTE
+## 7. SEPARAR TREINO E TESTE
 
 X_train, X_test, y_train, y_test = train_test_split(
     X,
@@ -437,7 +443,7 @@ print(f"\nArquivos de treino/teste salvos em: {PASTA_TREINO}")
 
 
 # %%
-# 8. DEFINIÇÃO E TREINAMENTO DOS MODELOS
+## 8. DEFINIÇÃO E TREINAMENTO DOS MODELOS
 
 modelos = {}
 
@@ -536,3 +542,85 @@ print(grid_arvore.best_params_)
 
 print("\nMelhor recall médio na validação cruzada da árvore:")
 print(grid_arvore.best_score_)
+
+# %%
+## 9. REDE NEURAL COM TENSORFLOW / KERAS - OPCIONAL
+
+if HAS_TENSORFLOW:
+    preprocessador_rede = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler())
+    ])
+
+    X_train_rede = preprocessador_rede.fit_transform(X_train).astype("float32")
+    X_test_rede = preprocessador_rede.transform(X_test).astype("float32")
+
+    y_train_rede = y_train.astype("float32")
+    y_test_rede = y_test.astype("float32")
+
+    modelo_rede = keras.Sequential([
+        layers.Input(shape=(X_train_rede.shape[1],)),
+        layers.Dense(32, activation="relu"),
+        layers.Dropout(0.2),
+        layers.Dense(16, activation="relu"),
+        layers.Dropout(0.2),
+        layers.Dense(8, activation="relu"),
+        layers.Dense(1, activation="sigmoid")
+    ])
+
+    modelo_rede.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=0.001),
+        loss="binary_crossentropy",
+        metrics=[
+            "accuracy",
+            keras.metrics.Precision(name="precision"),
+            keras.metrics.Recall(name="recall")
+        ]
+    )
+
+    early_stop = keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        patience=20,
+        restore_best_weights=True
+    )
+
+    historico_rede = modelo_rede.fit(
+        X_train_rede,
+        y_train_rede,
+        validation_split=0.2,
+        epochs=200,
+        batch_size=16,
+        callbacks=[early_stop],
+        verbose=1
+    )
+
+    probabilidades_rede = modelo_rede.predict(X_test_rede).ravel()
+    y_pred_rede = (probabilidades_rede >= LIMIAR_REDE).astype(int)
+    y_pred_rede_limiar = (probabilidades_rede >= LIMIAR_REDE_AJUSTADO).astype(int)
+
+    # Métricas da rede serão adicionadas manualmente na etapa de avaliação
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(historico_rede.history["loss"], label="Loss Treino")
+    plt.plot(historico_rede.history["val_loss"], label="Loss Validação")
+    plt.title("Evolução da Perda - Rede Neural")
+    plt.xlabel("Épocas")
+    plt.ylabel("Loss")
+    plt.legend()
+    salvar_figura("rede_neural_loss.png")
+    plt.show()
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(historico_rede.history["accuracy"], label="Acurácia Treino")
+    plt.plot(historico_rede.history["val_accuracy"], label="Acurácia Validação")
+    plt.title("Evolução da Acurácia - Rede Neural")
+    plt.xlabel("Épocas")
+    plt.ylabel("Acurácia")
+    plt.legend()
+    salvar_figura("rede_neural_acuracia.png")
+    plt.show()
+
+else:
+    print("\nTensorFlow não está instalado. A rede neural será ignorada nesta execução.")
+
+# %%
