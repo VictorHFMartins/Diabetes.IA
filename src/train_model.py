@@ -751,3 +751,56 @@ salvar_figura("analise_overfitting_diferenca_acuracia.png")
 plt.show()
 
 # %%
+# 13. VALIDAÇÃO CRUZADA DO MELHOR MODELO
+
+# Se o melhor for uma variação de limiar ou rede neural, usa a árvore simples como modelo reproduzível do sklearn.
+modelo_para_cv_nome = melhor_modelo_nome
+if modelo_para_cv_nome not in modelos or "Limiar" in modelo_para_cv_nome:
+    modelo_para_cv_nome = "Árvore de Decisão"
+
+modelo_para_cv = modelos[modelo_para_cv_nome]
+
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+cv_resultado = cross_validate(
+    modelo_para_cv,
+    X,
+    y,
+    cv=cv,
+    scoring={
+        "accuracy": "accuracy",
+        "precision": "precision",
+        "recall": "recall",
+        "f1": "f1",
+        "roc_auc": "roc_auc",
+    },
+    n_jobs=-1
+)
+
+df_cv = pd.DataFrame({
+    "Métrica": ["Acurácia", "Precisão", "Recall", "F1-score", "ROC AUC"],
+    "Média CV": [
+        cv_resultado["test_accuracy"].mean(),
+        cv_resultado["test_precision"].mean(),
+        cv_resultado["test_recall"].mean(),
+        cv_resultado["test_f1"].mean(),
+        cv_resultado["test_roc_auc"].mean(),
+    ],
+    "Desvio padrão": [
+        cv_resultado["test_accuracy"].std(),
+        cv_resultado["test_precision"].std(),
+        cv_resultado["test_recall"].std(),
+        cv_resultado["test_f1"].std(),
+        cv_resultado["test_roc_auc"].std(),
+    ]
+})
+
+print("\n" + "=" * 80)
+print(f"VALIDAÇÃO CRUZADA DO MODELO: {modelo_para_cv_nome}")
+print("=" * 80)
+print(df_cv)
+
+df_cv.to_csv(PASTA_REPORTS / "validacao_cruzada_melhor_modelo.csv", index=False)
+
+
+# %%
