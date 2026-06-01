@@ -395,3 +395,15 @@ print(medias_por_classe)
 
 medias_por_classe.to_csv(PASTA_REPORTS / "medias_por_classe.csv")
 
+#%%
+# 6. SEPARAR ENTRADAS E SAÍDA + TRATAR ZEROS INVÁLIDOS
+
+X = df.drop("Outcome", axis=1).copy()
+y = df["Outcome"].copy()
+
+X[COLUNAS_COM_ZERO_INVALIDO] = X[COLUNAS_COM_ZERO_INVALIDO].replace(0, np.nan)
+
+print("\nQuantidade de valores ausentes depois da troca de 0 por NaN:")
+print(X.isna().sum())
+
+# %%
