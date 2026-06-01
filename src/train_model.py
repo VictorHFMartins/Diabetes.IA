@@ -624,3 +624,67 @@ else:
     print("\nTensorFlow não está instalado. A rede neural será ignorada nesta execução.")
 
 # %%
+# 10. AVALIAR TODOS OS MODELOS
+
+resultados_lista = []
+overfitting_lista = {}
+predicoes_teste = {}
+probabilidades_teste = {}
+
+for nome, modelo in modelos.items():
+    if nome == "Regressão Logística - Limiar 0.4":
+        probabilidades = modelos["Regressão Logística"].predict_proba(X_test)[:, 1]
+        y_pred = (probabilidades >= LIMIAR_REGRESSAO).astype(int)
+
+        metricas = calcular_metricas(y_test, y_pred, probabilidades)
+        metricas["Modelo"] = nome
+        resultados_lista.append(metricas)
+
+        y_pred_train = (modelos["Regressão Logística"].predict_proba(X_train)[:, 1] >= LIMIAR_REGRESSAO).astype(int)
+        overfitting_lista[nome] = {
+            "Modelo": nome,
+            "Acurácia Treino": accuracy_score(y_train, y_pred_train),
+            "Acurácia Teste": accuracy_score(y_test, y_pred),
+            "Diferença Acurácia": accuracy_score(y_train, y_pred_train) - accuracy_score(y_test, y_pred),
+            "Recall Treino": recall_score(y_train, y_pred_train, zero_division=0),
+            "Recall Teste": recall_score(y_test, y_pred, zero_division=0),
+            "Diferença Recall": recall_score(y_train, y_pred_train, zero_division=0) - recall_score(y_test, y_pred, zero_division=0),
+        }
+
+        predicoes_teste[nome] = y_pred
+        probabilidades_teste[nome] = probabilidades
+        continue
+
+    metricas, overfitting, y_pred, y_prob = avaliar_modelo(nome, modelo, X_train, X_test, y_train, y_test)
+
+    resultados_lista.append(metricas)
+    overfitting_lista[nome] = overfitting
+    predicoes_teste[nome] = y_pred
+    probabilidades_teste[nome] = y_prob
+
+# Adiciona rede neural se disponível
+if HAS_TENSORFLOW:
+    metricas_rede = calcular_metricas(y_test, y_pred_rede, probabilidades_rede)
+    metricas_rede["Modelo"] = "Rede Neural - Keras"
+    resultados_lista.append(metricas_rede)
+    predicoes_teste["Rede Neural - Keras"] = y_pred_rede
+    probabilidades_teste["Rede Neural - Keras"] = probabilidades_rede
+
+    metricas_rede_limiar = calcular_metricas(y_test, y_pred_rede_limiar, probabilidades_rede)
+    metricas_rede_limiar["Modelo"] = "Rede Neural - Keras - Limiar 0.4"
+    resultados_lista.append(metricas_rede_limiar)
+    predicoes_teste["Rede Neural - Keras - Limiar 0.4"] = y_pred_rede_limiar
+    probabilidades_teste["Rede Neural - Keras - Limiar 0.4"] = probabilidades_rede
+
+    # Overfitting simplificado da rede pela última época do histórico
+    overfitting_lista["Rede Neural - Keras"] = {
+        "Modelo": "Rede Neural - Keras",
+        "Acurácia Treino": historico_rede.history["accuracy"][-1],
+        "Acurácia Teste": accuracy_score(y_test, y_pred_rede),
+        "Diferença Acurácia": historico_rede.history["accuracy"][-1] - accuracy_score(y_test, y_pred_rede),
+        "Recall Treino": historico_rede.history["recall"][-1],
+        "Recall Teste": recall_score(y_test, y_pred_rede, zero_division=0),
+        "Diferença Recall": historico_rede.history["recall"][-1] - recall_score(y_test, y_pred_rede, zero_division=0),
+    }
+
+# %%
