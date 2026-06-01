@@ -804,3 +804,57 @@ df_cv.to_csv(PASTA_REPORTS / "validacao_cruzada_melhor_modelo.csv", index=False)
 
 
 # %%
+# 14. GRÁFICOS COMPARATIVOS E CURVAS
+
+resultados_plot = resultados.set_index("Modelo")
+
+plt.figure(figsize=(20, 8))
+resultados_plot[["Acurácia", "Precisão", "Recall/Sensibilidade", "F1-score", "ROC AUC"]].plot(kind="bar", figsize=(20, 8))
+plt.title("Comparação de Métricas entre os Modelos")
+plt.ylabel("Valor da Métrica")
+plt.xlabel("Modelo")
+plt.ylim(0, 1)
+plt.xticks(rotation=45, ha="right")
+plt.legend(title="Métricas")
+salvar_figura("comparacao_metricas_modelos.png")
+plt.show()
+
+# Matrizes de confusão dos principais modelos
+for nome in ["Regressão Logística", "Árvore de Decisão", "Árvore de Decisão Otimizada", "Random Forest Otimizado", "Gradient Boosting Otimizado"]:
+    if nome in predicoes_teste:
+        plotar_matriz_confusao(nome, y_test, predicoes_teste[nome])
+
+# Curva ROC e Precision-Recall do melhor modelo disponível
+if melhor_modelo_nome in probabilidades_teste and probabilidades_teste[melhor_modelo_nome] is not None:
+    y_prob_melhor = probabilidades_teste[melhor_modelo_nome]
+else:
+    y_prob_melhor = probabilidades_teste.get(modelo_para_cv_nome)
+
+if y_prob_melhor is not None:
+    fpr, tpr, _ = roc_curve(y_test, y_prob_melhor)
+    auc = roc_auc_score(y_test, y_prob_melhor)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, label=f"ROC AUC = {auc:.3f}")
+    plt.plot([0, 1], [0, 1], linestyle="--", label="Aleatório")
+    plt.title(f"Curva ROC - {melhor_modelo_nome}")
+    plt.xlabel("Taxa de falsos positivos")
+    plt.ylabel("Taxa de verdadeiros positivos / Recall")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    salvar_figura("curva_roc_melhor_modelo.png")
+    plt.show()
+
+    precision_curve, recall_curve, _ = precision_recall_curve(y_test, y_prob_melhor)
+    pr_auc = average_precision_score(y_test, y_prob_melhor)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall_curve, precision_curve, label=f"PR AUC = {pr_auc:.3f}")
+    plt.title(f"Curva Precision-Recall - {melhor_modelo_nome}")
+    plt.xlabel("Recall / Sensibilidade")
+    plt.ylabel("Precisão")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    salvar_figura("curva_precision_recall_melhor_modelo.png")
+    plt.show()
+# %%
