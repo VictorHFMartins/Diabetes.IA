@@ -688,3 +688,44 @@ if HAS_TENSORFLOW:
     }
 
 # %%
+# 11. TABELA FINAL DE RESULTADOS
+
+resultados = pd.DataFrame(resultados_lista)
+
+ordem_colunas = [
+    "Modelo",
+    "Acurácia",
+    "Precisão",
+    "Recall/Sensibilidade",
+    "Especificidade",
+    "F1-score",
+    "ROC AUC",
+    "PR AUC",
+    "Falsos Negativos",
+    "Taxa de Falsos Negativos",
+    "Falsos Positivos",
+    "Taxa de Falsos Positivos",
+]
+
+resultados = resultados[ordem_colunas].sort_values(
+    by=["F1-score", "Recall/Sensibilidade", "Acurácia"],
+    ascending=False
+)
+
+print("\n" + "=" * 80)
+print("COMPARAÇÃO FINAL DOS MODELOS")
+print("=" * 80)
+print(resultados)
+
+resultados.to_csv(PASTA_REPORTS / "metricas_modelos.csv", index=False)
+
+melhor_linha = resultados.iloc[0]
+melhor_modelo_nome = melhor_linha["Modelo"]
+
+print("\n" + "=" * 80)
+print("MELHOR MODELO PELO CRITÉRIO: F1-SCORE > RECALL > ACURÁCIA")
+print("=" * 80)
+print(melhor_linha)
+
+
+# %%
