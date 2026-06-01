@@ -1,9 +1,9 @@
 # app.py
-# ==========================================================
+# ==============================
 # IA para Predição de Risco de Diabetes
 # Protótipo acadêmico com foco em triagem, prevenção,
 # explicabilidade, métricas e reflexão ética.
-# ==========================================================
+# ==============================
 
 from pathlib import Path
 
@@ -41,13 +41,17 @@ from sklearn.metrics import (
     precision_recall_curve,
 )
 
+
 # CONFIGURAÇÕES DA PÁGINA
+
 
 st.set_page_config(
     page_title="IA para Predição de Diabetes", page_icon="🩺", layout="wide"
 )
 
+
 # CAMINHOS E CONSTANTES
+
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -77,6 +81,7 @@ NOMES_VARIAVEIS = {
     "Age": "Idade",
     "Outcome": "Resultado",
 }
+
 
 # CARREGAMENTO E PREPARAÇÃO
 
@@ -291,14 +296,71 @@ def treinar_modelos():
     return modelos, df_metricas, X, y, X_train, X_test, y_train, y_test
 
 
+# FUNÇÕES DE VISUALIZAÇÃO - EDA
+
+
+def plotar_correlacao(df):
+    fig, ax = plt.subplots(figsize=(10, 7))
+
+    corr = df.corr(numeric_only=True)
+    imagem = ax.imshow(corr, aspect="auto")
+
+    ax.set_xticks(range(len(corr.columns)))
+    ax.set_yticks(range(len(corr.columns)))
+    ax.set_xticklabels(corr.columns, rotation=45, ha="right")
+    ax.set_yticklabels(corr.columns)
+
+    for i in range(len(corr.columns)):
+        for j in range(len(corr.columns)):
+            ax.text(
+                j, i, f"{corr.iloc[i, j]:.2f}", ha="center", va="center", fontsize=8
+            )
+
+    ax.set_title("Matriz de Correlação")
+    fig.colorbar(imagem, ax=ax)
+    fig.tight_layout()
+
+    return fig
+
+
+def plotar_histograma(df, coluna):
+    fig, ax = plt.subplots(figsize=(7, 4))
+
+    ax.hist(df[coluna].dropna(), bins=25)
+    ax.set_title(f"Distribuição de {NOMES_VARIAVEIS.get(coluna, coluna)}")
+    ax.set_xlabel(NOMES_VARIAVEIS.get(coluna, coluna))
+    ax.set_ylabel("Frequência")
+    ax.grid(True, alpha=0.3)
+
+    return fig
+
+
+def plotar_boxplot_por_classe(df, coluna):
+    sem_diabetes = df[df["Outcome"] == 0][coluna].dropna()
+    com_diabetes = df[df["Outcome"] == 1][coluna].dropna()
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+
+    ax.boxplot([sem_diabetes, com_diabetes], labels=["Sem Diabetes", "Com Diabetes"])
+
+    ax.set_title(f"{NOMES_VARIAVEIS.get(coluna, coluna)} por classe")
+    ax.set_ylabel(NOMES_VARIAVEIS.get(coluna, coluna))
+    ax.grid(True, alpha=0.3)
+
+    return fig
+
+
 # EXECUÇÃO DO PIPELINE
+
 
 df = carregar_dados()
 X, y, X_train, X_test, y_train, y_test = preparar_dados(df)
 
 modelos, df_metricas, X, y, X_train, X_test, y_train, y_test = treinar_modelos()
 
+
 # INTERFACE PRINCIPAL
+
 
 st.title("🩺 IA para Predição de Risco de Diabetes")
 
@@ -311,7 +373,9 @@ st.markdown(
     """
 )
 
+
 # SIDEBAR
+
 
 st.sidebar.header("Configurações")
 
@@ -326,13 +390,17 @@ modelo_escolhido = modelos[modelo_escolhido_nome]
 st.sidebar.write("Modelo selecionado:")
 st.sidebar.success(modelo_escolhido_nome)
 
+
 # ABAS
+
 
 aba_predicao, aba_modelos, aba_dataset, aba_eda, aba_etica = st.tabs(
     ["Predição", "Modelos e Métricas", "Dataset", "EDA", "Ética e Limitações"]
 )
 
+
 # ABA 1: PREDIÇÃO
+
 
 with aba_predicao:
     st.header("Predição individual")
@@ -430,7 +498,9 @@ with aba_predicao:
             "Procure um profissional de saúde para avaliação adequada."
         )
 
+
 # ABA 2: MODELOS E MÉTRICAS
+
 
 with aba_modelos:
     st.header("Comparação dos modelos")
@@ -508,7 +578,9 @@ with aba_modelos:
         ]
     )
 
+
 # ABA 3: DATASET
+
 
 with aba_dataset:
     st.header("Visualização do dataset")
@@ -539,13 +611,96 @@ with aba_dataset:
     col_d2.metric("Sem diabetes", sem_diabetes)
     col_d3.metric("Com diabetes", com_diabetes)
 
+    st.subheader("Análise de zeros inválidos")
+
+    zeros_invalidos = pd.DataFrame(
+        {
+            "Coluna": COLUNAS_ZERO_INVALIDO,
+            "Quantidade de zeros": [
+                int((df[col] == 0).sum()) for col in COLUNAS_ZERO_INVALIDO
+            ],
+            "Percentual": [
+                float((df[col] == 0).mean() * 100) for col in COLUNAS_ZERO_INVALIDO
+            ],
+        }
+    )
+
+    st.dataframe(zeros_invalidos, use_container_width=True)
+
+    st.info(
+        "No pré-processamento, zeros clinicamente improváveis em glicose, "
+        "pressão arterial, espessura da pele, insulina e IMC são tratados "
+        "como dados ausentes e preenchidos pela mediana."
+    )
+
+
 # ABA 4: EDA
 
+
 with aba_eda:
-    st.header("EDA")
-    st.info("A análise exploratória será adicionada nos próximos commits.")
+    st.header("Análise Exploratória de Dados - EDA")
+
+    st.write(
+        "Esta seção reforça a interpretação dos dados antes da modelagem, "
+        "com gráficos de distribuição, correlação, comparação por classe "
+        "e médias agrupadas."
+    )
+
+    st.subheader("Matriz de correlação")
+    st.pyplot(plotar_correlacao(df))
+
+    st.subheader("Comparação de médias por classe")
+
+    medias = df.groupby("Outcome").mean(numeric_only=True)
+    medias.index = ["Sem Diabetes", "Com Diabetes"]
+
+    st.dataframe(medias, use_container_width=True)
+
+    st.subheader("Histogramas")
+
+    coluna_hist = st.selectbox(
+        "Escolha uma variável para visualizar o histograma:",
+        [
+            "Glucose",
+            "BMI",
+            "Age",
+            "Insulin",
+            "BloodPressure",
+            "DiabetesPedigreeFunction",
+        ],
+    )
+
+    st.pyplot(plotar_histograma(df, coluna_hist))
+
+    st.subheader("Boxplot por classe")
+
+    coluna_box = st.selectbox(
+        "Escolha uma variável para comparar por classe:",
+        [
+            "Glucose",
+            "BMI",
+            "Age",
+            "Insulin",
+            "BloodPressure",
+            "DiabetesPedigreeFunction",
+        ],
+        index=1,
+    )
+
+    st.pyplot(plotar_boxplot_por_classe(df, coluna_box))
+
+    st.markdown(
+        """
+        **Leitura crítica para o relatório:**  
+        A EDA ajuda a identificar padrões, valores ausentes, distribuição das classes
+        e variáveis com maior relação com o desfecho. Em saúde, essa etapa é essencial
+        para evitar conclusões baseadas apenas na acurácia do modelo.
+        """
+    )
+
 
 # ABA 5: ÉTICA E LIMITAÇÕES
+
 
 with aba_etica:
     st.header("Ética e Limitações")
