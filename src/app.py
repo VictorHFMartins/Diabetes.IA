@@ -41,17 +41,28 @@ from sklearn.metrics import (
     precision_recall_curve,
 )
 
+# CONFIGURAÇÕES DA PÁGINA
+
 st.set_page_config(
     page_title="IA para Predição de Diabetes", page_icon="🩺", layout="wide"
 )
 
-BASE_DIR = Path(__file__).resolve().parent
-DATASET_PATH = BASE_DIR.parent / "data" / "diabetes.csv"
-MODELS_DIR = BASE_DIR.parent / "models"
-REPORTS_DIR = BASE_DIR.parent / "reports"
+# CAMINHOS E CONSTANTES
 
-MODELS_DIR.mkdir(exist_ok=True)
-REPORTS_DIR.mkdir(exist_ok=True)
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
+
+DATASET_PATH = PROJECT_ROOT / "data" / "diabetes.csv"
+
+# fallback caso o dataset esteja dentro da pasta src
+if not DATASET_PATH.exists():
+    DATASET_PATH = BASE_DIR / "diabetes.csv"
+
+MODELS_DIR = PROJECT_ROOT / "models"
+REPORTS_DIR = PROJECT_ROOT / "reports"
+
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 COLUNAS_ZERO_INVALIDO = ["Glucose", "BloodPressure", "SkinThickness", "Insulin", "BMI"]
 
@@ -66,6 +77,8 @@ NOMES_VARIAVEIS = {
     "Age": "Idade",
     "Outcome": "Resultado",
 }
+
+# CARREGAMENTO E PREPARAÇÃO
 
 
 @st.cache_data
@@ -86,8 +99,59 @@ def preparar_dados(df):
     return X, y, X_train, X_test, y_train, y_test
 
 
-df = carregar_dados()
-X, y, X_train, X_test, y_train, y_test = preparar_dados(df)
+# FUNÇÕES DE MÉTRICAS
+
+
+def obter_probabilidade(modelo, X):
+    if hasattr(modelo, "predict_proba"):
+        return modelo.predict_proba(X)[:, 1]
+
+    if hasattr(modelo, "decision_function"):
+        scores = modelo.decision_function(X)
+        denominador = scores.max() - scores.min()
+
+        if denominador == 0:
+            return np.zeros_like(scores)
+
+        return (scores - scores.min()) / denominador
+
+    return None
+
+
+def calcular_metricas(y_real, y_pred, y_prob=None):
+    tn, fp, fn, tp = confusion_matrix(y_real, y_pred).ravel()
+
+    especificidade = tn / (tn + fp) if (tn + fp) else 0
+    taxa_falso_negativo = fn / (fn + tp) if (fn + tp) else 0
+    taxa_falso_positivo = fp / (fp + tn) if (fp + tn) else 0
+
+    metricas = {
+        "Acurácia": accuracy_score(y_real, y_pred),
+        "Precisão": precision_score(y_real, y_pred, zero_division=0),
+        "Recall/Sensibilidade": recall_score(y_real, y_pred, zero_division=0),
+        "Especificidade": especificidade,
+        "F1-score": f1_score(y_real, y_pred, zero_division=0),
+        "Falsos Negativos": int(fn),
+        "Taxa de Falsos Negativos": taxa_falso_negativo,
+        "Falsos Positivos": int(fp),
+        "Taxa de Falsos Positivos": taxa_falso_positivo,
+    }
+
+    if y_prob is not None:
+        try:
+            metricas["ROC AUC"] = roc_auc_score(y_real, y_prob)
+            metricas["PR AUC"] = average_precision_score(y_real, y_prob)
+        except ValueError:
+            metricas["ROC AUC"] = np.nan
+            metricas["PR AUC"] = np.nan
+    else:
+        metricas["ROC AUC"] = np.nan
+        metricas["PR AUC"] = np.nan
+
+    return metricas
+
+
+# TREINAMENTO DOS MODELOS
 
 
 @st.cache_resource
@@ -191,21 +255,50 @@ def treinar_modelos():
     grid_arvore.fit(X_train, y_train)
     modelos["Árvore de Decisão Otimizada"] = grid_arvore.best_estimator_
 
-    return modelos, X, y, X_train, X_test, y_train, y_test
+    metricas = []
+
+    for nome, modelo in modelos.items():
+        y_pred = modelo.predict(X_test)
+        y_prob = obter_probabilidade(modelo, X_test)
+
+        resultado = calcular_metricas(y_test, y_pred, y_prob)
+        resultado["Modelo"] = nome
+        metricas.append(resultado)
+
+    df_metricas = pd.DataFrame(metricas)
+
+    ordem_colunas = [
+        "Modelo",
+        "Acurácia",
+        "Precisão",
+        "Recall/Sensibilidade",
+        "Especificidade",
+        "F1-score",
+        "ROC AUC",
+        "PR AUC",
+        "Falsos Negativos",
+        "Taxa de Falsos Negativos",
+        "Falsos Positivos",
+        "Taxa de Falsos Positivos",
+    ]
+
+    df_metricas = df_metricas[ordem_colunas].sort_values(
+        by=["F1-score", "Recall/Sensibilidade", "Acurácia"], ascending=False
+    )
+
+    df_metricas.to_csv(REPORTS_DIR / "metricas_modelos.csv", index=False)
+
+    return modelos, df_metricas, X, y, X_train, X_test, y_train, y_test
 
 
-modelos, X, y, X_train, X_test, y_train, y_test = treinar_modelos()
+# EXECUÇÃO DO PIPELINE
 
-modelo_escolhido_nome = st.sidebar.selectbox(
-    "Escolha o modelo de IA:",
-    list(modelos.keys()),
-    index=list(modelos.keys()).index("Árvore de Decisão"),
-)
+df = carregar_dados()
+X, y, X_train, X_test, y_train, y_test = preparar_dados(df)
 
-modelo_escolhido = modelos[modelo_escolhido_nome]
+modelos, df_metricas, X, y, X_train, X_test, y_train, y_test = treinar_modelos()
 
-st.sidebar.write("Modelo selecionado:")
-st.sidebar.success(modelo_escolhido_nome)
+# INTERFACE PRINCIPAL
 
 st.title("🩺 IA para Predição de Risco de Diabetes")
 
@@ -218,11 +311,28 @@ st.markdown(
     """
 )
 
+# SIDEBAR
+
 st.sidebar.header("Configurações")
+
+modelo_escolhido_nome = st.sidebar.selectbox(
+    "Escolha o modelo de IA:",
+    list(modelos.keys()),
+    index=list(modelos.keys()).index("Árvore de Decisão"),
+)
+
+modelo_escolhido = modelos[modelo_escolhido_nome]
+
+st.sidebar.write("Modelo selecionado:")
+st.sidebar.success(modelo_escolhido_nome)
+
+# ABAS
 
 aba_predicao, aba_modelos, aba_dataset, aba_eda, aba_etica = st.tabs(
     ["Predição", "Modelos e Métricas", "Dataset", "EDA", "Ética e Limitações"]
 )
+
+# ABA 1: PREDIÇÃO
 
 with aba_predicao:
     st.header("Predição individual")
@@ -238,6 +348,7 @@ with aba_predicao:
         pregnancies = st.number_input(
             "Gestações", min_value=0, max_value=20, value=2, step=1
         )
+
         glucose = st.number_input(
             "Glicose", min_value=0, max_value=250, value=140, step=1
         )
@@ -246,6 +357,7 @@ with aba_predicao:
         blood_pressure = st.number_input(
             "Pressão arterial", min_value=0, max_value=150, value=80, step=1
         )
+
         skin_thickness = st.number_input(
             "Espessura da pele", min_value=0, max_value=120, value=30, step=1
         )
@@ -254,6 +366,7 @@ with aba_predicao:
         insulin = st.number_input(
             "Insulina", min_value=0, max_value=900, value=120, step=1
         )
+
         bmi = st.number_input(
             "IMC", min_value=0.0, max_value=80.0, value=32.5, step=0.1
         )
@@ -267,6 +380,7 @@ with aba_predicao:
             step=0.001,
             format="%.3f",
         )
+
         age = st.number_input("Idade", min_value=1, max_value=120, value=35, step=1)
 
     paciente = pd.DataFrame(
@@ -316,9 +430,85 @@ with aba_predicao:
             "Procure um profissional de saúde para avaliação adequada."
         )
 
+# ABA 2: MODELOS E MÉTRICAS
+
 with aba_modelos:
-    st.header("Modelos e Métricas")
-    st.info("As métricas serão adicionadas nos próximos commits.")
+    st.header("Comparação dos modelos")
+
+    st.write(
+        "A tabela abaixo compara os modelos usando métricas importantes para saúde, "
+        "como acurácia, precisão, recall/sensibilidade, especificidade, F1-score, "
+        "ROC AUC, PR AUC, falsos negativos e falsos positivos."
+    )
+
+    st.dataframe(df_metricas, use_container_width=True)
+
+    st.subheader("Melhor modelo pelo critério F1-score > Recall > Acurácia")
+
+    melhor_modelo = df_metricas.iloc[0]
+
+    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+
+    with col_m1:
+        st.metric("Acurácia", f"{melhor_modelo['Acurácia']:.3f}")
+
+    with col_m2:
+        st.metric("Precisão", f"{melhor_modelo['Precisão']:.3f}")
+
+    with col_m3:
+        st.metric("Recall", f"{melhor_modelo['Recall/Sensibilidade']:.3f}")
+
+    with col_m4:
+        st.metric("F1-score", f"{melhor_modelo['F1-score']:.3f}")
+
+    with col_m5:
+        st.metric("ROC AUC", f"{melhor_modelo['ROC AUC']:.3f}")
+
+    st.info(f"Modelo melhor classificado: **{melhor_modelo['Modelo']}**")
+
+    st.subheader("Por que o recall é importante neste projeto?")
+
+    st.markdown(
+        """
+        Em um sistema de triagem preventiva, o **falso negativo** é um erro crítico:
+        ele ocorre quando o modelo classifica uma pessoa como baixo risco mesmo havendo sinais de risco.
+
+        Por isso, além da acurácia, este projeto avalia **recall/sensibilidade**,
+        matriz de confusão e taxa de falsos negativos.
+        """
+    )
+
+    st.subheader("Matriz de confusão do modelo selecionado")
+
+    y_pred_modelo = modelo_escolhido.predict(X_test)
+    matriz = confusion_matrix(y_test, y_pred_modelo)
+
+    matriz_df = pd.DataFrame(
+        matriz,
+        index=["Real: Sem Diabetes", "Real: Com Diabetes"],
+        columns=["Previsto: Sem Diabetes", "Previsto: Com Diabetes"],
+    )
+
+    st.dataframe(matriz_df, use_container_width=True)
+
+    tn, fp, fn, tp = matriz.ravel()
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Verdadeiros Negativos", tn)
+    c2.metric("Falsos Positivos", fp)
+    c3.metric("Falsos Negativos", fn)
+    c4.metric("Verdadeiros Positivos", tp)
+
+    st.subheader("Gráfico de comparação")
+
+    st.bar_chart(
+        df_metricas.set_index("Modelo")[
+            ["Acurácia", "Precisão", "Recall/Sensibilidade", "F1-score", "ROC AUC"]
+        ]
+    )
+
+# ABA 3: DATASET
 
 with aba_dataset:
     st.header("Visualização do dataset")
@@ -344,13 +534,18 @@ with aba_dataset:
     com_diabetes = int((df["Outcome"] == 1).sum())
 
     col_d1, col_d2, col_d3 = st.columns(3)
+
     col_d1.metric("Total de registros", total)
     col_d2.metric("Sem diabetes", sem_diabetes)
     col_d3.metric("Com diabetes", com_diabetes)
 
+# ABA 4: EDA
+
 with aba_eda:
     st.header("EDA")
     st.info("A análise exploratória será adicionada nos próximos commits.")
+
+# ABA 5: ÉTICA E LIMITAÇÕES
 
 with aba_etica:
     st.header("Ética e Limitações")
