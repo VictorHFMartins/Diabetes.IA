@@ -921,3 +921,48 @@ metadata = {
 pd.Series(metadata).to_csv(PASTA_REPORTS / "metadata_modelo.csv")
 
 # %%
+# 17. TESTE COM UM NOVO PACIENTE + CAMADA DE AGENTE
+
+novo_paciente = pd.DataFrame({
+    "Pregnancies": [2],
+    "Glucose": [140],
+    "BloodPressure": [80],
+    "SkinThickness": [30],
+    "Insulin": [120],
+    "BMI": [32.5],
+    "DiabetesPedigreeFunction": [0.6],
+    "Age": [35]
+})
+
+print("\n" + "=" * 80)
+print("TESTE COM NOVO PACIENTE")
+print("=" * 80)
+
+print("\nDados do novo paciente:")
+print(novo_paciente)
+
+modelo_agente = modelo_para_salvar
+predicao = modelo_agente.predict(novo_paciente)[0]
+
+if hasattr(modelo_agente, "predict_proba"):
+    probabilidade_com_diabetes = modelo_agente.predict_proba(novo_paciente)[0][1]
+else:
+    probabilidade_com_diabetes = float(predicao)
+
+interpretacao = gerar_recomendacoes_preventivas(novo_paciente, probabilidade_com_diabetes)
+
+print("\nResultado do agente:")
+print(f"Classe prevista: {predicao}")
+print(f"Probabilidade com diabetes: {probabilidade_com_diabetes:.4f}")
+print(f"Nível de risco preventivo: {interpretacao['Nivel de risco']}")
+print(f"Mensagem: {interpretacao['Mensagem']}")
+
+print("\nFatores de atenção:")
+for fator in interpretacao["Fatores de atenção"]:
+    print(f"- {fator}")
+
+print("\nRecomendações preventivas:")
+for recomendacao in interpretacao["Recomendações"]:
+    print(f"- {recomendacao}")
+
+# %%
