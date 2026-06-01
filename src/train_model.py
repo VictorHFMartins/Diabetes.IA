@@ -729,3 +729,25 @@ print(melhor_linha)
 
 
 # %%
+# 12. ANÁLISE DE OVERFITTING
+
+df_overfitting = pd.DataFrame(list(overfitting_lista.values()))
+df_overfitting = df_overfitting.sort_values(by="Diferença Acurácia", ascending=False)
+
+print("\n" + "=" * 80)
+print("ANÁLISE DE OVERFITTING - TREINO X TESTE")
+print("=" * 80)
+print(df_overfitting)
+
+df_overfitting.to_csv(PASTA_REPORTS / "analise_overfitting.csv", index=False)
+
+plt.figure(figsize=(14, 6))
+plt.bar(df_overfitting["Modelo"], df_overfitting["Diferença Acurácia"])
+plt.title("Diferença de Acurácia entre Treino e Teste")
+plt.ylabel("Acurácia Treino - Acurácia Teste")
+plt.xticks(rotation=45, ha="right")
+plt.grid(True, axis="y", alpha=0.3)
+salvar_figura("analise_overfitting_diferenca_acuracia.png")
+plt.show()
+
+# %%
