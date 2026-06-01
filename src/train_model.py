@@ -858,3 +858,41 @@ if y_prob_melhor is not None:
     salvar_figura("curva_precision_recall_melhor_modelo.png")
     plt.show()
 # %%
+# 15. EXPLICABILIDADE: ÁRVORE E IMPORTÂNCIA DE VARIÁVEIS
+
+# Árvore simples
+arvore_treinada = modelos["Árvore de Decisão"].named_steps["model"]
+
+plt.figure(figsize=(22, 12))
+plot_tree(
+    arvore_treinada,
+    feature_names=X.columns,
+    class_names=["Sem Diabetes", "Com Diabetes"],
+    filled=True,
+    rounded=True,
+    fontsize=9
+)
+plt.title("Árvore de Decisão - Predição de Diabetes")
+salvar_figura("arvore_decisao_simples.png")
+plt.show()
+
+# Importância das variáveis nos modelos interpretáveis
+for nome in ["Árvore de Decisão", "Árvore de Decisão Otimizada", "Random Forest Otimizado", "Gradient Boosting Otimizado", "Regressão Logística"]:
+    if nome in modelos:
+        importancias = obter_importancia_variaveis(modelos[nome], X.columns)
+
+        if importancias is not None:
+            print(f"\nImportância das variáveis - {nome}:")
+            print(importancias)
+
+            importancias.to_csv(PASTA_REPORTS / f"importancias_{nome.lower().replace(' ', '_')}.csv", index=False)
+
+            plt.figure(figsize=(10, 6))
+            plt.barh(importancias["Nome em português"].fillna(importancias["Variável"]), importancias["Importância"])
+            plt.title(f"Importância das Variáveis - {nome}")
+            plt.xlabel("Importância")
+            plt.ylabel("Variável")
+            plt.gca().invert_yaxis()
+            salvar_figura(f"importancia_variaveis_{nome.lower().replace(' ', '_')}.png")
+            plt.show()
+# %%

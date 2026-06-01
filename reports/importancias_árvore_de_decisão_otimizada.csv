@@ -1,0 +1,9 @@
+Variável,Importância,Nome em português
+Glucose,0.6196875568687394,Glicose
+BMI,0.22270146181391068,IMC
+Age,0.15761098131734988,Idade
+Pregnancies,0.0,Gestações
+SkinThickness,0.0,Espessura da pele
+BloodPressure,0.0,Pressão arterial
+Insulin,0.0,Insulina
+DiabetesPedigreeFunction,0.0,Histórico familiar
