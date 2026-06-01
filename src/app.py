@@ -2,7 +2,7 @@
 # ==============================
 # IA para Predição de Risco de Diabetes
 # Protótipo acadêmico com foco em triagem, prevenção,
-# explicabilidade, métricas e reflexão ética.
+# explicabilidade, métricas, validação, overfitting e reflexão ética.
 # ==============================
 
 from pathlib import Path
@@ -11,7 +11,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import joblib
 
 from sklearn.model_selection import (
     train_test_split,
@@ -42,25 +41,35 @@ from sklearn.metrics import (
 )
 
 
+# ==============================
 # CONFIGURAÇÕES DA PÁGINA
-
+# ==============================
 
 st.set_page_config(
-    page_title="IA para Predição de Diabetes", page_icon="🩺", layout="wide"
+    page_title="IA para Predição de Diabetes",
+    page_icon="🩺",
+    layout="wide",
 )
 
 
+# ==============================
 # CAMINHOS E CONSTANTES
-
+# ==============================
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
 DATASET_PATH = PROJECT_ROOT / "data" / "diabetes.csv"
 
-# fallback caso o dataset esteja dentro da pasta src
 if not DATASET_PATH.exists():
     DATASET_PATH = BASE_DIR / "diabetes.csv"
+
+if not DATASET_PATH.exists():
+    st.error(
+        "Arquivo diabetes.csv não encontrado. "
+        "Coloque o dataset em data/diabetes.csv ou src/diabetes.csv."
+    )
+    st.stop()
 
 MODELS_DIR = PROJECT_ROOT / "models"
 REPORTS_DIR = PROJECT_ROOT / "reports"
@@ -68,7 +77,13 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-COLUNAS_ZERO_INVALIDO = ["Glucose", "BloodPressure", "SkinThickness", "Insulin", "BMI"]
+COLUNAS_ZERO_INVALIDO = [
+    "Glucose",
+    "BloodPressure",
+    "SkinThickness",
+    "Insulin",
+    "BMI",
+]
 
 NOMES_VARIAVEIS = {
     "Pregnancies": "Gestações",
@@ -83,7 +98,9 @@ NOMES_VARIAVEIS = {
 }
 
 
+# ==============================
 # CARREGAMENTO E PREPARAÇÃO
+# ==============================
 
 
 @st.cache_data
@@ -98,13 +115,28 @@ def preparar_dados(df):
     X[COLUNAS_ZERO_INVALIDO] = X[COLUNAS_ZERO_INVALIDO].replace(0, np.nan)
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y,
     )
 
     return X, y, X_train, X_test, y_train, y_test
 
 
+def preparar_paciente_para_modelo(paciente):
+    paciente_modelo = paciente.copy()
+    paciente_modelo[COLUNAS_ZERO_INVALIDO] = paciente_modelo[
+        COLUNAS_ZERO_INVALIDO
+    ].replace(0, np.nan)
+
+    return paciente_modelo
+
+
+# ==============================
 # FUNÇÕES DE MÉTRICAS
+# ==============================
 
 
 def obter_probabilidade(modelo, X):
@@ -156,7 +188,77 @@ def calcular_metricas(y_real, y_pred, y_prob=None):
     return metricas
 
 
+def avaliar_overfitting(nome, modelo, X_train, y_train, X_test, y_test):
+    y_pred_train = modelo.predict(X_train)
+    y_pred_test = modelo.predict(X_test)
+
+    return {
+        "Modelo": nome,
+        "Acurácia Treino": accuracy_score(y_train, y_pred_train),
+        "Acurácia Teste": accuracy_score(y_test, y_pred_test),
+        "Diferença Acurácia": accuracy_score(y_train, y_pred_train)
+        - accuracy_score(y_test, y_pred_test),
+        "Recall Treino": recall_score(y_train, y_pred_train, zero_division=0),
+        "Recall Teste": recall_score(y_test, y_pred_test, zero_division=0),
+        "Diferença Recall": recall_score(y_train, y_pred_train, zero_division=0)
+        - recall_score(y_test, y_pred_test, zero_division=0),
+    }
+
+
+def gerar_validacao_cruzada(modelo, X, y):
+    cv = StratifiedKFold(
+        n_splits=5,
+        shuffle=True,
+        random_state=42,
+    )
+
+    cv_resultado = cross_validate(
+        modelo,
+        X,
+        y,
+        cv=cv,
+        scoring={
+            "accuracy": "accuracy",
+            "precision": "precision",
+            "recall": "recall",
+            "f1": "f1",
+            "roc_auc": "roc_auc",
+        },
+        n_jobs=-1,
+    )
+
+    df_cv = pd.DataFrame(
+        {
+            "Métrica": [
+                "Acurácia",
+                "Precisão",
+                "Recall",
+                "F1-score",
+                "ROC AUC",
+            ],
+            "Média CV": [
+                cv_resultado["test_accuracy"].mean(),
+                cv_resultado["test_precision"].mean(),
+                cv_resultado["test_recall"].mean(),
+                cv_resultado["test_f1"].mean(),
+                cv_resultado["test_roc_auc"].mean(),
+            ],
+            "Desvio padrão": [
+                cv_resultado["test_accuracy"].std(),
+                cv_resultado["test_precision"].std(),
+                cv_resultado["test_recall"].std(),
+                cv_resultado["test_f1"].std(),
+                cv_resultado["test_roc_auc"].std(),
+            ],
+        }
+    )
+
+    return df_cv
+
+
+# ==============================
 # CAMADA DE AGENTE E EXPLICABILIDADE
+# ==============================
 
 
 def classificar_risco(probabilidade):
@@ -187,7 +289,12 @@ def gerar_recomendacoes_preventivas(paciente, probabilidade):
     fatores = []
     recomendacoes = []
 
-    if p["Glucose"] >= 126:
+    if p["Glucose"] == 0:
+        fatores.append("glicose não informada ou zerada")
+        recomendacoes.append(
+            "A glicose foi preenchida como 0. No modelo, esse valor é tratado como ausente."
+        )
+    elif p["Glucose"] >= 126:
         fatores.append("glicose elevada")
         recomendacoes.append(
             "A glicose informada está em faixa de atenção. Procure orientação profissional para interpretação adequada."
@@ -198,7 +305,12 @@ def gerar_recomendacoes_preventivas(paciente, probabilidade):
             "A glicose está acima de uma faixa ideal em jejum. Vale acompanhar esse indicador com um profissional."
         )
 
-    if p["BMI"] >= 30:
+    if p["BMI"] == 0:
+        fatores.append("IMC não informado ou zerado")
+        recomendacoes.append(
+            "O IMC foi preenchido como 0. No modelo, esse valor é tratado como ausente."
+        )
+    elif p["BMI"] >= 30:
         fatores.append("IMC elevado")
         recomendacoes.append(
             "O IMC informado sugere obesidade, fator associado ao risco de diabetes tipo 2."
@@ -221,11 +333,22 @@ def gerar_recomendacoes_preventivas(paciente, probabilidade):
             "O histórico familiar informado aumenta a necessidade de atenção preventiva."
         )
 
-    if p["BloodPressure"] >= 130:
+    if p["BloodPressure"] == 0:
+        fatores.append("pressão arterial não informada ou zerada")
+        recomendacoes.append(
+            "A pressão arterial foi preenchida como 0. No modelo, esse valor é tratado como ausente."
+        )
+    elif p["BloodPressure"] >= 130:
         fatores.append("pressão arterial elevada")
         recomendacoes.append(
             "A pressão arterial informada está elevada. Ela deve ser acompanhada por profissional de saúde."
         )
+
+    if p["Insulin"] == 0:
+        fatores.append("insulina não informada ou zerada")
+
+    if p["SkinThickness"] == 0:
+        fatores.append("espessura da pele não informada ou zerada")
 
     if not recomendacoes:
         recomendacoes.append(
@@ -257,7 +380,10 @@ def obter_importancia_variaveis(modelo, nomes_colunas):
         return None
 
     df_importancias = pd.DataFrame(
-        {"Variável": nomes_colunas, "Importância": importancias}
+        {
+            "Variável": nomes_colunas,
+            "Importância": importancias,
+        }
     ).sort_values("Importância", ascending=False)
 
     df_importancias["Variável"] = (
@@ -269,7 +395,9 @@ def obter_importancia_variaveis(modelo, nomes_colunas):
     return df_importancias
 
 
+# ==============================
 # TREINAMENTO DOS MODELOS
+# ==============================
 
 
 @st.cache_resource
@@ -374,6 +502,7 @@ def treinar_modelos():
     modelos["Árvore de Decisão Otimizada"] = grid_arvore.best_estimator_
 
     metricas = []
+    overfitting = []
 
     for nome, modelo in modelos.items():
         y_pred = modelo.predict(X_test)
@@ -382,6 +511,17 @@ def treinar_modelos():
         resultado = calcular_metricas(y_test, y_pred, y_prob)
         resultado["Modelo"] = nome
         metricas.append(resultado)
+
+        overfitting.append(
+            avaliar_overfitting(
+                nome,
+                modelo,
+                X_train,
+                y_train,
+                X_test,
+                y_test,
+            )
+        )
 
     df_metricas = pd.DataFrame(metricas)
 
@@ -401,15 +541,43 @@ def treinar_modelos():
     ]
 
     df_metricas = df_metricas[ordem_colunas].sort_values(
-        by=["F1-score", "Recall/Sensibilidade", "Acurácia"], ascending=False
+        by=["F1-score", "Recall/Sensibilidade", "Acurácia"],
+        ascending=False,
     )
 
+    df_overfitting = pd.DataFrame(overfitting).sort_values(
+        by="Diferença Acurácia",
+        ascending=False,
+    )
+
+    melhor_nome = df_metricas.iloc[0]["Modelo"]
+    melhor_modelo = modelos[melhor_nome]
+    df_cv = gerar_validacao_cruzada(melhor_modelo, X, y)
+
     df_metricas.to_csv(REPORTS_DIR / "metricas_modelos.csv", index=False)
+    df_overfitting.to_csv(REPORTS_DIR / "analise_overfitting.csv", index=False)
+    df_cv.to_csv(
+        REPORTS_DIR / "validacao_cruzada_melhor_modelo.csv",
+        index=False,
+    )
 
-    return modelos, df_metricas, X, y, X_train, X_test, y_train, y_test
+    return (
+        modelos,
+        df_metricas,
+        df_overfitting,
+        df_cv,
+        X,
+        y,
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+    )
 
 
-# FUNÇÕES DE VISUALIZAÇÃO - EDA
+# ==============================
+# FUNÇÕES DE VISUALIZAÇÃO
+# ==============================
 
 
 def plotar_correlacao(df):
@@ -426,7 +594,12 @@ def plotar_correlacao(df):
     for i in range(len(corr.columns)):
         for j in range(len(corr.columns)):
             ax.text(
-                j, i, f"{corr.iloc[i, j]:.2f}", ha="center", va="center", fontsize=8
+                j,
+                i,
+                f"{corr.iloc[i, j]:.2f}",
+                ha="center",
+                va="center",
+                fontsize=8,
             )
 
     ax.set_title("Matriz de Correlação")
@@ -454,7 +627,10 @@ def plotar_boxplot_por_classe(df, coluna):
 
     fig, ax = plt.subplots(figsize=(7, 4))
 
-    ax.boxplot([sem_diabetes, com_diabetes], labels=["Sem Diabetes", "Com Diabetes"])
+    ax.boxplot(
+        [sem_diabetes, com_diabetes],
+        labels=["Sem Diabetes", "Com Diabetes"],
+    )
 
     ax.set_title(f"{NOMES_VARIAVEIS.get(coluna, coluna)} por classe")
     ax.set_ylabel(NOMES_VARIAVEIS.get(coluna, coluna))
@@ -463,17 +639,61 @@ def plotar_boxplot_por_classe(df, coluna):
     return fig
 
 
-# EXECUÇÃO DO PIPELINE
+def plotar_roc(y_test, y_prob, nome_modelo):
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+    auc = roc_auc_score(y_test, y_prob)
 
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(fpr, tpr, label=f"ROC AUC = {auc:.3f}")
+    ax.plot([0, 1], [0, 1], linestyle="--", label="Aleatório")
+    ax.set_title(f"Curva ROC - {nome_modelo}")
+    ax.set_xlabel("Taxa de falsos positivos")
+    ax.set_ylabel("Taxa de verdadeiros positivos / Recall")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    return fig
+
+
+def plotar_precision_recall(y_test, y_prob, nome_modelo):
+    precision, recall, _ = precision_recall_curve(y_test, y_prob)
+    pr_auc = average_precision_score(y_test, y_prob)
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(recall, precision, label=f"PR AUC = {pr_auc:.3f}")
+    ax.set_title(f"Curva Precision-Recall - {nome_modelo}")
+    ax.set_xlabel("Recall / Sensibilidade")
+    ax.set_ylabel("Precisão")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    return fig
+
+
+# ==============================
+# EXECUÇÃO DO PIPELINE
+# ==============================
 
 df = carregar_dados()
 X, y, X_train, X_test, y_train, y_test = preparar_dados(df)
 
-modelos, df_metricas, X, y, X_train, X_test, y_train, y_test = treinar_modelos()
+(
+    modelos,
+    df_metricas,
+    df_overfitting,
+    df_cv,
+    X,
+    y,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+) = treinar_modelos()
 
 
+# ==============================
 # INTERFACE PRINCIPAL
-
+# ==============================
 
 st.title("🩺 IA para Predição de Risco de Diabetes")
 
@@ -487,8 +707,9 @@ st.markdown(
 )
 
 
+# ==============================
 # SIDEBAR
-
+# ==============================
 
 st.sidebar.header("Configurações")
 
@@ -503,17 +724,29 @@ modelo_escolhido = modelos[modelo_escolhido_nome]
 st.sidebar.write("Modelo selecionado:")
 st.sidebar.success(modelo_escolhido_nome)
 
-
-# ABAS
-
-
-aba_predicao, aba_modelos, aba_dataset, aba_eda, aba_etica = st.tabs(
-    ["Predição", "Modelos e Métricas", "Dataset", "EDA", "Ética e Limitações"]
+st.sidebar.caption(
+    "As métricas, overfitting e validação cruzada são calculadas automaticamente."
 )
 
 
-# ABA 1: PREDIÇÃO
+# ==============================
+# ABAS
+# ==============================
 
+aba_predicao, aba_modelos, aba_dataset, aba_eda, aba_etica = st.tabs(
+    [
+        "Predição",
+        "Modelos e Métricas",
+        "Dataset",
+        "EDA",
+        "Ética e Limitações",
+    ]
+)
+
+
+# ==============================
+# ABA 1: PREDIÇÃO
+# ==============================
 
 with aba_predicao:
     st.header("Predição individual")
@@ -527,29 +760,53 @@ with aba_predicao:
 
     with col1:
         pregnancies = st.number_input(
-            "Gestações", min_value=0, max_value=20, value=2, step=1
+            "Gestações",
+            min_value=0,
+            max_value=20,
+            value=2,
+            step=1,
         )
 
         glucose = st.number_input(
-            "Glicose", min_value=0, max_value=250, value=140, step=1
+            "Glicose",
+            min_value=0,
+            max_value=250,
+            value=140,
+            step=1,
         )
 
     with col2:
         blood_pressure = st.number_input(
-            "Pressão arterial", min_value=0, max_value=150, value=80, step=1
+            "Pressão arterial",
+            min_value=0,
+            max_value=150,
+            value=80,
+            step=1,
         )
 
         skin_thickness = st.number_input(
-            "Espessura da pele", min_value=0, max_value=120, value=30, step=1
+            "Espessura da pele",
+            min_value=0,
+            max_value=120,
+            value=30,
+            step=1,
         )
 
     with col3:
         insulin = st.number_input(
-            "Insulina", min_value=0, max_value=900, value=120, step=1
+            "Insulina",
+            min_value=0,
+            max_value=900,
+            value=120,
+            step=1,
         )
 
         bmi = st.number_input(
-            "IMC", min_value=0.0, max_value=80.0, value=32.5, step=0.1
+            "IMC",
+            min_value=0.0,
+            max_value=80.0,
+            value=32.5,
+            step=0.1,
         )
 
     with col4:
@@ -562,7 +819,13 @@ with aba_predicao:
             format="%.3f",
         )
 
-        age = st.number_input("Idade", min_value=1, max_value=120, value=35, step=1)
+        age = st.number_input(
+            "Idade",
+            min_value=1,
+            max_value=120,
+            value=35,
+            step=1,
+        )
 
     paciente = pd.DataFrame(
         {
@@ -580,12 +843,26 @@ with aba_predicao:
     st.subheader("Dados informados")
     st.dataframe(paciente, use_container_width=True)
 
+    campos_zerados = [
+        coluna for coluna in COLUNAS_ZERO_INVALIDO if paciente[coluna].iloc[0] == 0
+    ]
+
+    if campos_zerados:
+        nomes_campos = [NOMES_VARIAVEIS.get(campo, campo) for campo in campos_zerados]
+
+        st.warning(
+            "Alguns campos clínicos foram preenchidos com 0 e serão tratados "
+            "como dados ausentes pelo modelo: " + ", ".join(nomes_campos)
+        )
+
     if st.button("Realizar predição"):
-        predicao = modelo_escolhido.predict(paciente)[0]
+        paciente_modelo = preparar_paciente_para_modelo(paciente)
+
+        predicao = modelo_escolhido.predict(paciente_modelo)[0]
         y_prob_paciente = None
 
         if hasattr(modelo_escolhido, "predict_proba"):
-            probabilidades = modelo_escolhido.predict_proba(paciente)[0]
+            probabilidades = modelo_escolhido.predict_proba(paciente_modelo)[0]
             probabilidade_sem_diabetes = probabilidades[0]
             probabilidade_com_diabetes = probabilidades[1]
             y_prob_paciente = probabilidade_com_diabetes
@@ -594,7 +871,8 @@ with aba_predicao:
             probabilidade_com_diabetes = float(predicao)
 
         interpretacao = gerar_recomendacoes_preventivas(
-            paciente, probabilidade_com_diabetes
+            paciente,
+            probabilidade_com_diabetes,
         )
 
         st.markdown("---")
@@ -647,7 +925,10 @@ with aba_predicao:
         for recomendacao in interpretacao["recomendacoes"]:
             st.markdown(f"- {recomendacao}")
 
-        importancia = obter_importancia_variaveis(modelo_escolhido, paciente.columns)
+        importancia = obter_importancia_variaveis(
+            modelo_escolhido,
+            paciente.columns,
+        )
 
         if importancia is not None:
             st.subheader("Variáveis mais importantes para este modelo")
@@ -665,8 +946,9 @@ with aba_predicao:
         )
 
 
+# ==============================
 # ABA 2: MODELOS E MÉTRICAS
-
+# ==============================
 
 with aba_modelos:
     st.header("Comparação dos modelos")
@@ -710,13 +992,19 @@ with aba_modelos:
         ele ocorre quando o modelo classifica uma pessoa como baixo risco mesmo havendo sinais de risco.
 
         Por isso, além da acurácia, este projeto avalia **recall/sensibilidade**,
-        matriz de confusão e taxa de falsos negativos.
+        matriz de confusão, taxa de falsos negativos, overfitting e validação cruzada.
         """
     )
 
-    st.subheader("Matriz de confusão do modelo selecionado")
+    st.subheader(f"Matriz de confusão do modelo selecionado: {modelo_escolhido_nome}")
+
+    st.caption(
+        "A matriz de confusão abaixo muda conforme o modelo escolhido na barra lateral."
+    )
 
     y_pred_modelo = modelo_escolhido.predict(X_test)
+    y_prob_modelo = obter_probabilidade(modelo_escolhido, X_test)
+
     matriz = confusion_matrix(y_test, y_pred_modelo)
 
     matriz_df = pd.DataFrame(
@@ -740,13 +1028,65 @@ with aba_modelos:
 
     st.bar_chart(
         df_metricas.set_index("Modelo")[
-            ["Acurácia", "Precisão", "Recall/Sensibilidade", "F1-score", "ROC AUC"]
+            [
+                "Acurácia",
+                "Precisão",
+                "Recall/Sensibilidade",
+                "F1-score",
+                "ROC AUC",
+            ]
         ]
     )
 
+    st.subheader("Análise de overfitting")
 
+    st.write(
+        "A tabela abaixo compara o desempenho no treino e no teste. "
+        "Diferenças muito altas podem indicar que o modelo decorou padrões do treino."
+    )
+
+    st.dataframe(df_overfitting, use_container_width=True)
+
+    st.bar_chart(
+        df_overfitting.set_index("Modelo")[["Diferença Acurácia", "Diferença Recall"]]
+    )
+
+    st.subheader("Validação cruzada do melhor modelo")
+
+    st.write(
+        "A validação cruzada K-Fold avalia o modelo em diferentes divisões dos dados, "
+        "aumentando a confiança sobre a estabilidade dos resultados."
+    )
+
+    st.dataframe(df_cv, use_container_width=True)
+
+    if y_prob_modelo is not None:
+        st.subheader("Curvas de avaliação do modelo selecionado")
+
+        col_roc, col_pr = st.columns(2)
+
+        with col_roc:
+            st.pyplot(
+                plotar_roc(
+                    y_test,
+                    y_prob_modelo,
+                    modelo_escolhido_nome,
+                )
+            )
+
+        with col_pr:
+            st.pyplot(
+                plotar_precision_recall(
+                    y_test,
+                    y_prob_modelo,
+                    modelo_escolhido_nome,
+                )
+            )
+
+
+# ==============================
 # ABA 3: DATASET
-
+# ==============================
 
 with aba_dataset:
     st.header("Visualização do dataset")
@@ -800,8 +1140,9 @@ with aba_dataset:
     )
 
 
+# ==============================
 # ABA 4: EDA
-
+# ==============================
 
 with aba_eda:
     st.header("Análise Exploratória de Dados - EDA")
@@ -865,8 +1206,9 @@ with aba_eda:
     )
 
 
+# ==============================
 # ABA 5: ÉTICA E LIMITAÇÕES
-
+# ==============================
 
 with aba_etica:
     st.header("Ética, riscos e limitações")
@@ -912,10 +1254,12 @@ with aba_etica:
         apresentar métricas de erro e deixar claro que a predição é probabilística.
 
         A interface apresenta:
-        
+
         - probabilidade estimada;
         - matriz de confusão;
         - falsos positivos e falsos negativos;
+        - análise de overfitting;
+        - validação cruzada;
         - importância das variáveis em modelos interpretáveis;
         - recomendações preventivas baseadas em regras simples;
         - aviso explícito de que o sistema não substitui avaliação médica.
