@@ -156,6 +156,119 @@ def calcular_metricas(y_real, y_pred, y_prob=None):
     return metricas
 
 
+# CAMADA DE AGENTE E EXPLICABILIDADE
+
+
+def classificar_risco(probabilidade):
+    if probabilidade is None:
+        return "Indefinido", "Não foi possível calcular a probabilidade do risco."
+
+    if probabilidade >= 0.70:
+        return (
+            "Alto",
+            "Probabilidade elevada. Recomenda-se buscar avaliação profissional com prioridade.",
+        )
+
+    if probabilidade >= 0.40:
+        return (
+            "Moderado",
+            "Há sinais de atenção. Recomenda-se acompanhamento e avaliação profissional.",
+        )
+
+    return (
+        "Baixo",
+        "Probabilidade menor pelo modelo, mas o resultado não elimina a necessidade de cuidados preventivos.",
+    )
+
+
+def gerar_recomendacoes_preventivas(paciente, probabilidade):
+    p = paciente.iloc[0]
+
+    fatores = []
+    recomendacoes = []
+
+    if p["Glucose"] >= 126:
+        fatores.append("glicose elevada")
+        recomendacoes.append(
+            "A glicose informada está em faixa de atenção. Procure orientação profissional para interpretação adequada."
+        )
+    elif p["Glucose"] >= 100:
+        fatores.append("glicose em faixa de atenção")
+        recomendacoes.append(
+            "A glicose está acima de uma faixa ideal em jejum. Vale acompanhar esse indicador com um profissional."
+        )
+
+    if p["BMI"] >= 30:
+        fatores.append("IMC elevado")
+        recomendacoes.append(
+            "O IMC informado sugere obesidade, fator associado ao risco de diabetes tipo 2."
+        )
+    elif p["BMI"] >= 25:
+        fatores.append("IMC acima da faixa ideal")
+        recomendacoes.append(
+            "O IMC está acima da faixa ideal e pode contribuir para risco metabólico."
+        )
+
+    if p["Age"] >= 45:
+        fatores.append("idade mais elevada")
+        recomendacoes.append(
+            "A idade é um fator de risco importante. Acompanhamentos periódicos podem ajudar na prevenção."
+        )
+
+    if p["DiabetesPedigreeFunction"] >= 0.5:
+        fatores.append("histórico familiar relevante")
+        recomendacoes.append(
+            "O histórico familiar informado aumenta a necessidade de atenção preventiva."
+        )
+
+    if p["BloodPressure"] >= 130:
+        fatores.append("pressão arterial elevada")
+        recomendacoes.append(
+            "A pressão arterial informada está elevada. Ela deve ser acompanhada por profissional de saúde."
+        )
+
+    if not recomendacoes:
+        recomendacoes.append(
+            "Mantenha acompanhamento preventivo, hábitos saudáveis e exames periódicos conforme orientação profissional."
+        )
+
+    nivel, mensagem = classificar_risco(probabilidade)
+
+    return {
+        "nivel": nivel,
+        "mensagem": mensagem,
+        "fatores": fatores
+        if fatores
+        else ["nenhum fator isolado se destacou pelas regras clínicas simples"],
+        "recomendacoes": recomendacoes,
+    }
+
+
+def obter_importancia_variaveis(modelo, nomes_colunas):
+    etapa_modelo = (
+        modelo.named_steps.get("model") if isinstance(modelo, Pipeline) else modelo
+    )
+
+    if hasattr(etapa_modelo, "feature_importances_"):
+        importancias = etapa_modelo.feature_importances_
+    elif hasattr(etapa_modelo, "coef_"):
+        importancias = np.abs(etapa_modelo.coef_[0])
+    else:
+        return None
+
+    df_importancias = pd.DataFrame(
+        {"Variável": nomes_colunas, "Importância": importancias}
+    ).sort_values("Importância", ascending=False)
+
+    df_importancias["Variável"] = (
+        df_importancias["Variável"]
+        .map(NOMES_VARIAVEIS)
+        .fillna(df_importancias["Variável"])
+    )
+
+    return df_importancias
+
+
 # TREINAMENTO DOS MODELOS
 
 
@@ -469,33 +582,86 @@ with aba_predicao:
 
     if st.button("Realizar predição"):
         predicao = modelo_escolhido.predict(paciente)[0]
+        y_prob_paciente = None
+
+        if hasattr(modelo_escolhido, "predict_proba"):
+            probabilidades = modelo_escolhido.predict_proba(paciente)[0]
+            probabilidade_sem_diabetes = probabilidades[0]
+            probabilidade_com_diabetes = probabilidades[1]
+            y_prob_paciente = probabilidade_com_diabetes
+        else:
+            probabilidade_sem_diabetes = None
+            probabilidade_com_diabetes = float(predicao)
+
+        interpretacao = gerar_recomendacoes_preventivas(
+            paciente, probabilidade_com_diabetes
+        )
 
         st.markdown("---")
         st.subheader("Resultado da predição")
 
-        if predicao == 1:
-            st.error("Resultado: possível risco de diabetes.")
-        else:
-            st.success("Resultado: baixo risco de diabetes.")
+        col_r1, col_r2, col_r3 = st.columns(3)
 
-        if hasattr(modelo_escolhido, "predict_proba"):
-            probabilidades = modelo_escolhido.predict_proba(paciente)[0]
+        with col_r1:
+            if predicao == 1:
+                st.error("Possível risco de diabetes")
+            else:
+                st.success("Baixo risco pelo modelo")
 
+        with col_r2:
+            st.metric("Nível de risco preventivo", interpretacao["nivel"])
+
+        with col_r3:
+            if y_prob_paciente is not None:
+                st.metric(
+                    "Probabilidade com diabetes",
+                    f"{probabilidade_com_diabetes * 100:.2f}%",
+                )
+            else:
+                st.metric("Classe prevista", int(predicao))
+
+        if y_prob_paciente is not None:
             col_prob1, col_prob2 = st.columns(2)
 
             with col_prob1:
                 st.metric(
-                    "Probabilidade Sem Diabetes", f"{probabilidades[0] * 100:.2f}%"
+                    "Probabilidade Sem Diabetes",
+                    f"{probabilidade_sem_diabetes * 100:.2f}%",
                 )
 
             with col_prob2:
                 st.metric(
-                    "Probabilidade Com Diabetes", f"{probabilidades[1] * 100:.2f}%"
+                    "Probabilidade Com Diabetes",
+                    f"{probabilidade_com_diabetes * 100:.2f}%",
                 )
+
+        st.info(interpretacao["mensagem"])
+
+        st.subheader("Explicação preventiva do resultado")
+
+        st.write("Fatores que chamaram atenção nesta predição:")
+        st.write(", ".join(interpretacao["fatores"]))
+
+        st.write("Recomendações geradas pelo agente:")
+
+        for recomendacao in interpretacao["recomendacoes"]:
+            st.markdown(f"- {recomendacao}")
+
+        importancia = obter_importancia_variaveis(modelo_escolhido, paciente.columns)
+
+        if importancia is not None:
+            st.subheader("Variáveis mais importantes para este modelo")
+            st.dataframe(importancia.head(8), use_container_width=True)
+            st.bar_chart(importancia.set_index("Variável")["Importância"])
+        else:
+            st.caption(
+                "Este modelo não possui importância de variáveis diretamente interpretável."
+            )
 
         st.warning(
             "Este resultado é apenas uma estimativa gerada por IA. "
-            "Procure um profissional de saúde para avaliação adequada."
+            "Não use a ferramenta como diagnóstico, decisão médica, aprovação de benefício, "
+            "plano de saúde ou substituição de consulta."
         )
 
 
